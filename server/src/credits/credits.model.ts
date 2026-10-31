@@ -47,13 +47,20 @@ export const crmCreditFunds = sqliteTable(
       .notNull()
       .references(() => crmPaymentReceipts.id, { onDelete: 'cascade' }),
     amount_paise: integer('amount_paise').notNull(),
+    // ACC-004: funding withdrawn because its receipt moved to another
+    // customer is a negative row linked to the funding it reduces.
+    reversal_of_id: text('reversal_of_id').references(
+      (): AnySQLiteColumn => crmCreditFunds.id,
+    ),
+    reason: text('reason').notNull().default(''),
   },
   (t) => [
     index('credit_funds_credit_note_id_idx').on(t.credit_note_id),
     index('credit_funds_receipt_id_idx').on(t.receipt_id),
+    index('credit_funds_reversal_idx').on(t.reversal_of_id),
     check(
       'credit_funds_amount_paise_check',
-      sql`typeof(${t.amount_paise}) = 'integer' and ${t.amount_paise} > 0`,
+      sql`typeof(${t.amount_paise}) = 'integer' and ((${t.amount_paise} > 0 and ${t.reversal_of_id} is null) or (${t.amount_paise} < 0 and ${t.reversal_of_id} is not null))`,
     ),
   ],
 );

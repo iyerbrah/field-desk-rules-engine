@@ -69,7 +69,7 @@ export class CreditsService {
     if (!note)
       fail('CREDIT_NOT_FOUND', 'Select a credit belonging to this customer');
     new CreditBalance(
-      note.amount_paise,
+      this.creditsRepository.fundedForCredit(note.id),
       this.creditsRepository.appliedFromCredit(note.id),
       this.creditsRepository.refundedFromCredit(note.id),
     ).assertAvailable(p.amountPaise, 'application');
@@ -107,14 +107,18 @@ export class CreditsService {
     if (!note)
       fail('CREDIT_NOT_FOUND', 'Select a credit belonging to this customer');
     new CreditBalance(
-      note.amount_paise,
+      this.creditsRepository.fundedForCredit(note.id),
       this.creditsRepository.appliedFromCredit(note.id),
       this.creditsRepository.refundedFromCredit(note.id),
     ).assertAvailable(p.amountPaise, 'refund');
     let remaining = p.amountPaise;
-    for (const fund of this.creditsRepository.fundsForCredit(note.id)) {
+    // CRD-004: split across funding receipts in funding order, net of any
+    // funding withdrawn under ACC-004.
+    for (const fund of this.creditsRepository.fundingByReceiptForCredit(
+      note.id,
+    )) {
       const free =
-        fund.amount_paise -
+        fund.n -
         this.creditsRepository.refundedFromReceipt(note.id, fund.receipt_id);
       const take = Math.min(free, remaining);
       if (!take) continue;
@@ -215,7 +219,7 @@ export class CreditsService {
       .map((note) => ({
         ...note,
         availablePaise: new CreditBalance(
-          note.amount_paise,
+          this.creditsRepository.fundedForCredit(note.id),
           this.creditsRepository.appliedFromCredit(note.id),
           this.creditsRepository.refundedFromCredit(note.id),
         ).availablePaise,

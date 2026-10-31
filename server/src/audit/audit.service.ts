@@ -95,7 +95,10 @@ export class AuditService {
     } else if (table === 'credit_notes') {
       reason = `Reserve ${row.amount_paise} paise owed to the customer as explicit credit. Receipt funding is retained; application or refund requires Accounts action.`;
     } else if (table === 'credit_funds') {
-      reason = `Reserve ${row.amount_paise} paise of receipt ${row.receipt_id} for credit ${row.credit_note_id}, preventing reuse as unapplied cash.`;
+      reason =
+        Number(row.amount_paise) < 0
+          ? `Withdraw ${-Number(row.amount_paise)} paise of credit ${row.credit_note_id} funded by receipt ${row.receipt_id}, which moved to another customer.`
+          : `Reserve ${row.amount_paise} paise of receipt ${row.receipt_id} for credit ${row.credit_note_id}, preventing reuse as unapplied cash.`;
     } else if (table === 'payment_receipts') {
       reason = `Receive ${row.amount_paise} paise against customer ${row.customer_id}, reference ${row.reference}. No order is selected at capture.`;
     } else if (table === 'cancellations') {
@@ -351,13 +354,17 @@ export class AuditService {
       check(
         `credit:${credit.id}`,
         'Credit remains funded and within application and refund limits',
-        funding === credit.amount_paise &&
+        // CRD-001: fully funded when issued; ACC-004 withdrawals only
+        // lower the net funding, never below what is applied or refunded.
+        this.creditsRepository.originalFundingForCredit(credit.id) ===
+          credit.amount_paise &&
+          funding >= 0 &&
           credit.availablePaise >= 0 &&
           credit.appliedPaise >= 0 &&
           credit.refundedPaise >= 0 &&
           invalidApplications === 0 &&
           invalidRefunds === 0,
-        `Issued ${credit.amount_paise}; funded ${funding}; applied ${credit.appliedPaise}; refunded ${credit.refundedPaise}; open ${credit.availablePaise} paise.`,
+        `Issued ${credit.amount_paise}; net funding ${funding}; applied ${credit.appliedPaise}; refunded ${credit.refundedPaise}; open ${credit.availablePaise} paise.`,
         [credit.id],
       );
     }

@@ -73,6 +73,7 @@ export class ActionsService {
               actorId,
               expectedVersion: envelope.expectedVersion,
               expectedVersions: envelope.expectedVersions,
+              answers: envelope.answers,
             }),
           )
           .digest('hex');
@@ -108,6 +109,7 @@ export class ActionsService {
           now: new Date().toISOString(),
           customerId: '',
           touched: new Set(),
+          answers: envelope.answers ?? {},
           effects: [],
           references: {},
           command: envelope.command,

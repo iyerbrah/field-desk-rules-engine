@@ -121,6 +121,120 @@ export class CapacityReconciler {
     return excess;
   }
 
+  /**
+   * ACC-002 / ACC-004: withdraw `amount` of credit funding drawn from a
+   * receipt that moved to another customer, latest funding first. Unused
+   * credit is withdrawn first. Credit already applied to charges must be
+   * reversed first (the caller decides whether that is allowed). Credit
+   * already refunded cannot be withdrawn: that money left the business.
+   *
+   * With `write` false nothing is recorded; the result says what a write
+   * would need, so the caller can ask before acting.
+   */
+  withdrawCreditFunding(
+    c: Context,
+    receiptId: string,
+    amount: number,
+    reason: string,
+    write: boolean,
+  ) {
+    const outcome = { applied: 0, refunded: 0, charges: new Set<string>() };
+    let left = amount;
+    const byNote = new Map<string, Array<{ id: string; remaining: number }>>();
+    for (const fund of this.creditsRepository.fundsFromReceipt(receiptId))
+      byNote.set(fund.credit_note_id, [
+        ...(byNote.get(fund.credit_note_id) ?? []),
+        fund,
+      ]);
+    for (const [noteId, funds] of byNote) {
+      if (!left) break;
+      const funded = funds.reduce((sum, fund) => sum + fund.remaining, 0);
+      const withdrawable =
+        funded - this.creditsRepository.refundedFromReceipt(noteId, receiptId);
+      const take = Math.min(left, Math.max(0, withdrawable));
+      if (!take) continue;
+      left -= take;
+      const open =
+        this.creditsRepository.fundedForCredit(noteId) -
+        this.creditsRepository.appliedFromCredit(noteId) -
+        this.creditsRepository.refundedFromCredit(noteId);
+      const applied = take - Math.min(take, Math.max(0, open));
+      outcome.applied += applied;
+      if (applied)
+        this.reverseApplications(
+          c,
+          noteId,
+          applied,
+          reason,
+          write,
+          outcome.charges,
+        );
+      if (!write) continue;
+      let withdraw = take;
+      for (const fund of funds) {
+        const part = Math.min(withdraw, fund.remaining);
+        if (!part) continue;
+        this.creditsRepository.insertFunding(c, {
+          id: randomUUID(),
+          credit_note_id: noteId,
+          receipt_id: receiptId,
+          amount_paise: -part,
+          reversal_of_id: fund.id,
+          reason,
+        });
+        withdraw -= part;
+      }
+    }
+    outcome.refunded = left;
+    return outcome;
+  }
+
+  /** CRD-006: reverse applied credit latest first, with linked negative entries. */
+  private reverseApplications(
+    c: Context,
+    noteId: string,
+    amount: number,
+    reason: string,
+    write: boolean,
+    charges: Set<string>,
+  ) {
+    let left = amount;
+    const taken = new Map<string, number>();
+    for (const application of this.creditsRepository.applicationsForCreditLatestFirst(
+      noteId,
+    )) {
+      if (!left) break;
+      const unreversed =
+        application.amount_paise +
+        this.creditsRepository.applicationReversals(application.id);
+      const onCharge =
+        this.creditsRepository.appliedBetween(noteId, application.charge_id) -
+        (taken.get(application.charge_id) ?? 0);
+      const take = Math.min(left, unreversed, onCharge);
+      if (take <= 0) continue;
+      left -= take;
+      taken.set(
+        application.charge_id,
+        (taken.get(application.charge_id) ?? 0) + take,
+      );
+      charges.add(application.charge_id);
+      if (write)
+        this.creditsRepository.insertApplication(c, {
+          id: randomUUID(),
+          customer_id: c.customerId,
+          credit_note_id: noteId,
+          charge_id: application.charge_id,
+          amount_paise: -take,
+          reversal_of_id: application.id,
+          reason,
+          action_id: c.id,
+          created_at: c.now,
+        });
+    }
+    if (left)
+      fail('FUNDING_MISMATCH', 'Applied credit could not be traced to charges');
+  }
+
   /** WF-003: cash goes back to receipts in reverse order of first allocation. */
   private releaseCash(
     c: Context,

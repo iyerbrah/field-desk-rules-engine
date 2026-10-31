@@ -22,6 +22,7 @@ import {
   fail,
   safe,
   forCustomer,
+  DomainDecision,
 } from '../common/domain.js';
 import { CapacityReconciler } from '../settlement/capacity.reconciler.js';
 
@@ -124,18 +125,69 @@ export class AccountsService {
       c,
       receipt.id,
     );
-    // Known limit (v1): moving money that funds customer credit is refused.
-    if (fundsCredit)
-      fail(
-        'RECEIPT_FUNDS_CREDIT',
-        `${fundsCredit} paise of this receipt fund customer credit. Moving them is not supported yet: reverse the credit's use first, or move a smaller amount.`,
-      );
+    // ACC-004 / CRD-001: the rest of the receipt funds customer credit.
+    if (fundsCredit) this.withdrawCredit(c, receipt.id, fundsCredit, p.reason);
     // WF-002: payment re-attribution is a cash-allocation occasion on both
     // accounts, and rewards follow the cash (REW-002, REW-003).
     for (const account of [c, target]) {
       this.allocateCash(account);
       this.rewardsService.refresh(account);
     }
+  }
+  /**
+   * ACC-004: credit funded by a moved receipt. Unused credit shrinks.
+   * Applied credit is reversed only after the user confirms. Refunded
+   * credit blocks the move: that money was paid out and must be recovered
+   * outside the system.
+   */
+  private withdrawCredit(
+    c: Context,
+    receiptId: string,
+    amount: number,
+    reason: string,
+  ) {
+    const plan = this.capacityReconciler.withdrawCreditFunding(
+      c,
+      receiptId,
+      amount,
+      reason,
+      false,
+    );
+    if (plan.refunded)
+      fail(
+        'RECEIPT_CREDIT_REFUNDED',
+        `${plan.refunded} paise of this receipt were already refunded to this customer as credit. That money has left the business, so it must be recovered outside the system before the payment can move.`,
+      );
+    const answer = c.answers.reverseAppliedCredit;
+    if (plan.applied && answer === 'KEEP')
+      fail(
+        'REATTRIBUTION_DECLINED',
+        'The payment was not moved because its credit stays applied',
+      );
+    if (plan.applied && answer !== 'REVERSE')
+      throw new DomainDecision(
+        [
+          {
+            key: 'reverseAppliedCredit',
+            prompt: `Moving this payment also reverses ${plan.applied} paise of credit applied to ${plan.charges.size} charge(s) (${[...plan.charges].join(', ')}). Those charges reopen. Proceed?`,
+            options: [
+              {
+                id: 'REVERSE',
+                label: 'Reverse the applied credit and move the payment',
+              },
+              { id: 'KEEP', label: 'Keep the credit and do not move it' },
+            ],
+          },
+        ],
+        'Moving this payment would reverse applied credit',
+      );
+    this.capacityReconciler.withdrawCreditFunding(
+      c,
+      receiptId,
+      amount,
+      reason,
+      true,
+    );
   }
   allocateCash(c: Context) {
     for (const receipt of this.accountsRepository.receiptsForCustomer(
@@ -211,7 +263,7 @@ export class AccountsService {
           appliedPaise,
           refundedPaise,
           availablePaise: new CreditBalance(
-            note.amount_paise,
+            this.creditsRepository.fundedForCredit(note.id),
             appliedPaise,
             refundedPaise,
           ).availablePaise,

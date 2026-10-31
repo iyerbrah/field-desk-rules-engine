@@ -1,5 +1,5 @@
 import { Injectable, Module } from '@nestjs/common';
-import { and, desc, eq, gt, lt, min, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, lt, min, sum } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { insertionOrder } from '../database/query-order.js';
@@ -184,6 +184,77 @@ export class CreditsRepository {
         .where(eq(crmCreditRefunds.customer_id, customerId))
         .get()?.value ?? 0,
     );
+  }
+  /** CRD-001: funding recorded when the credit was issued, before withdrawals. */
+  originalFundingForCredit(creditId: string) {
+    return safe(
+      this.db
+        .select({ value: sum(crmCreditFunds.amount_paise).mapWith(Number) })
+        .from(crmCreditFunds)
+        .where(
+          and(
+            eq(crmCreditFunds.credit_note_id, creditId),
+            gt(crmCreditFunds.amount_paise, 0),
+          ),
+        )
+        .get()?.value ?? 0,
+    );
+  }
+  /** CRD-004: net funding per receipt for a credit, in funding order. */
+  fundingByReceiptForCredit(creditId: string) {
+    return this.db
+      .select({
+        receipt_id: crmCreditFunds.receipt_id,
+        n: sum(crmCreditFunds.amount_paise).mapWith(Number),
+      })
+      .from(crmCreditFunds)
+      .where(eq(crmCreditFunds.credit_note_id, creditId))
+      .groupBy(crmCreditFunds.receipt_id)
+      .having(gt(sum(crmCreditFunds.amount_paise), 0))
+      .orderBy(asc(min(insertionOrder(crmCreditFunds))))
+      .all()
+      .map((row) => ({ ...row, n: safe(row.n ?? 0) }));
+  }
+  /**
+   * ACC-004: funding rows drawn from a receipt that still fund something,
+   * latest first, with the amount each still funds after withdrawals.
+   */
+  fundsFromReceipt(receiptId: string) {
+    const rows = this.db
+      .select()
+      .from(crmCreditFunds)
+      .where(eq(crmCreditFunds.receipt_id, receiptId))
+      .orderBy(insertionOrder(crmCreditFunds))
+      .all();
+    const withdrawn = new Map<string, number>();
+    for (const row of rows)
+      if (row.reversal_of_id)
+        withdrawn.set(
+          row.reversal_of_id,
+          (withdrawn.get(row.reversal_of_id) ?? 0) + row.amount_paise,
+        );
+    return rows
+      .filter((row) => !row.reversal_of_id)
+      .map((row) => ({
+        ...row,
+        remaining: row.amount_paise + (withdrawn.get(row.id) ?? 0),
+      }))
+      .filter((row) => row.remaining > 0)
+      .reverse();
+  }
+  /** Applications of a credit to charges, latest first. */
+  applicationsForCreditLatestFirst(creditId: string) {
+    return this.db
+      .select()
+      .from(crmCreditApplications)
+      .where(
+        and(
+          eq(crmCreditApplications.credit_note_id, creditId),
+          gt(crmCreditApplications.amount_paise, 0),
+        ),
+      )
+      .orderBy(desc(insertionOrder(crmCreditApplications)))
+      .all();
   }
   fundedForCredit(creditId: string) {
     return safe(

@@ -40,6 +40,7 @@ export class CustomersService {
           now: new Date().toISOString(),
           customerId: randomUUID(),
           touched: new Set(),
+          answers: {},
           effects: [],
           references: {},
         };

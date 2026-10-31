@@ -119,7 +119,7 @@ $$
 x=\min(u_i,b_j).
 $$
 
-**ACC-004. Payment re-attribution.** Accounts or Admin may move all or part of a receipt recorded against the wrong customer to the right one, giving a reason and the bank reference. The source receipt is not edited (**WF-001**): a transfer lowers its effective amount and creates a receipt on the receiving customer with the original reference. The moved amount $t$ must satisfy $0<t\leq m_i$. Free cash absorbs the move first. Allocations that no longer fit are released in reverse order of first allocation. If the move would also need credit funded by the receipt, it is refused (v1 limit). Both accounts are version-checked and reviewed, and each records the action. Then apply **WF-002** on both accounts.
+**ACC-004. Payment re-attribution.** Accounts or Admin may move all or part of a receipt recorded against the wrong customer to the right one, giving a reason and the bank reference. The source receipt is not edited (**WF-001**): a transfer lowers its effective amount and creates a receipt on the receiving customer with the original reference. The moved amount $t$ must satisfy $0<t\leq m_i$. Free cash absorbs the move first. Allocations that no longer fit are released in reverse order of first allocation. If the move also needs credit funded by the receipt, withdraw that funding with linked negative entries, latest funding first. Unused credit goes first. Credit already applied to charges is reversed (**CRD-006**) only after the user confirms, and those charges reopen. Credit already refunded cannot be withdrawn, so the move is refused and the money must be recovered outside the system. Both accounts are version-checked and reviewed, and each records the action. Then apply **WF-002** on both accounts.
 
 ### Credits
 

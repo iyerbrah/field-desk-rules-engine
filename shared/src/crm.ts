@@ -162,6 +162,8 @@ export const actionEnvelopeSchema = z
     expectedVersion: z.number().int().min(0).optional(),
     // Versions of other accounts a command touches, by customer id.
     expectedVersions: z.record(id, z.number().int().min(0)).optional(),
+    // Answers to decision questions from an earlier NEEDS_DECISION, by key.
+    answers: z.record(id, id).optional(),
   })
   .strict();
 export type CrmCommand = z.infer<typeof crmActionSchema>;

@@ -50,16 +50,24 @@ describe('FDSK-169 move a payment to the right customer (ACC-004)', () => {
     command: CrmCommand,
     targetCustomerId: string,
     role: Role = 'ACCOUNTS',
+    answers?: Record<string, string>,
   ): Promise<ActionEnvelope> {
     const base = await desk.envelope(command, role);
     const target = await desk.snapshot(targetCustomerId);
     return {
       ...base,
       expectedVersions: { [targetCustomerId]: target.summary.customer.version },
+      ...(answers ? { answers } : {}),
     };
   }
-  async function apply(command: CrmCommand, targetCustomerId: string) {
-    const result = await desk.submit(await envelope(command, targetCustomerId));
+  async function apply(
+    command: CrmCommand,
+    targetCustomerId: string,
+    answers?: Record<string, string>,
+  ) {
+    const result = await desk.submit(
+      await envelope(command, targetCustomerId, 'ACCOUNTS', answers),
+    );
     assert.equal(result.status, 'APPLIED', JSON.stringify(result.errors));
     for (const review of Object.values(result.reviews ?? {}))
       assert.ok(review.checks.every((check) => check.passed));
@@ -153,17 +161,101 @@ describe('FDSK-169 move a payment to the right customer (ACC-004)', () => {
     assert.equal(target.summary.unappliedCashPaise, 8000);
   });
 
-  it('refuses to move money that funds customer credit (v1 limit)', async () => {
+  async function issueCredit(customerId: string, amountPaise: number) {
+    const result = await desk.apply(
+      {
+        type: 'ISSUE_CREDIT_NOTE',
+        payload: { customerId, amountPaise, reason: 'Goodwill credit' },
+      },
+      'ACCOUNTS',
+    );
+    return result.references.creditNoteId!;
+  }
+
+  it('shrinks unused credit funded by the moved receipt', async () => {
     const northside = await customer();
     const greenfield = await customer();
     const receiptId = await receive(northside, 10000);
+    const creditNoteId = await issueCredit(northside, 10000);
+    await apply(move(northside, receiptId, greenfield), greenfield);
+
+    const source = await desk.snapshot(northside);
+    assertAccount(source, 0);
+    assert.equal(source.summary.creditsOpenPaise, 0);
+    const note = source.summary.credits.find((row) => row.id === creditNoteId)!;
+    assert.equal(note.amount_paise, 10000); // the issued record is kept
+    assert.equal(note.availablePaise, 0);
+    const target = await desk.snapshot(greenfield);
+    assertAccount(target, -10000);
+    assert.equal(target.summary.unappliedCashPaise, 10000);
+  });
+
+  it('asks before reversing applied credit, then reopens the charge when confirmed', async () => {
+    const northside = await customer();
+    const greenfield = await customer();
+    const receiptId = await receive(northside, 10000);
+    const creditNoteId = await issueCredit(northside, 10000);
+    await deliveredOrder(northside);
+    const [charge] = (await desk.snapshot(northside)).summary.charges;
     await desk.apply(
       {
-        type: 'ISSUE_CREDIT_NOTE',
+        type: 'APPLY_CREDIT_NOTE',
         payload: {
           customerId: northside,
+          creditNoteId,
+          chargeId: charge!.id,
           amountPaise: 10000,
-          reason: 'Goodwill credit',
+        },
+      },
+      'ACCOUNTS',
+    );
+    const command = move(northside, receiptId, greenfield);
+
+    const asked = await desk.assertUnchanged(
+      await envelope(command, greenfield),
+      northside,
+      'NEEDS_DECISION',
+    );
+    assert.equal(asked.decisions[0]!.key, 'reverseAppliedCredit');
+    assert.deepEqual(
+      asked.decisions[0]!.options.map((option) => option.id),
+      ['REVERSE', 'KEEP'],
+    );
+
+    const declined = await desk.assertUnchanged(
+      await envelope(command, greenfield, 'ACCOUNTS', {
+        reverseAppliedCredit: 'KEEP',
+      }),
+      northside,
+      'REJECTED',
+    );
+    assert.equal(declined.errors[0]!.code, 'REATTRIBUTION_DECLINED');
+
+    await apply(command, greenfield, { reverseAppliedCredit: 'REVERSE' });
+    const source = await desk.snapshot(northside);
+    assertAccount(source, 10000);
+    assert.equal(source.summary.outstandingPaise, 10000);
+    assert.equal(source.summary.creditsOpenPaise, 0);
+    const reversal = source.ledger.creditApplications.find(
+      (row) => Number(row.amount_paise) < 0,
+    )!;
+    assert.ok(reversal.reversal_of_id);
+    assertAccount(await desk.snapshot(greenfield), -10000);
+  });
+
+  it('rejects moving money already refunded as credit', async () => {
+    const northside = await customer();
+    const greenfield = await customer();
+    const receiptId = await receive(northside, 10000);
+    const creditNoteId = await issueCredit(northside, 10000);
+    await desk.apply(
+      {
+        type: 'REFUND_CREDIT_NOTE',
+        payload: {
+          customerId: northside,
+          creditNoteId,
+          amountPaise: 10000,
+          reference: 'NEFT-REFUND-0001',
         },
       },
       'ACCOUNTS',
@@ -173,7 +265,7 @@ describe('FDSK-169 move a payment to the right customer (ACC-004)', () => {
       northside,
       'REJECTED',
     );
-    assert.equal(result.errors[0]!.code, 'RECEIPT_FUNDS_CREDIT');
+    assert.equal(result.errors[0]!.code, 'RECEIPT_CREDIT_REFUNDED');
   });
 
   it('rejects moving a payment to the same customer', async () => {

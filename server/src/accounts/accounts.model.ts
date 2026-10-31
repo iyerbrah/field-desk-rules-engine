@@ -60,6 +60,49 @@ export const crmPaymentReceipts = sqliteTable(
   ],
 );
 
+/**
+ * ACC-004 (FDSK-169): part or all of a receipt moved to another customer
+ * because it was recorded against the wrong account. Receipts stay
+ * immutable (WF-001); the transfer lowers the source receipt's effective
+ * amount and names the receipt it created on the receiving account.
+ */
+export const crmReceiptTransfers = sqliteTable(
+  'receipt_transfers',
+  {
+    id: text('id').primaryKey(),
+    customer_id: text('customer_id')
+      .notNull()
+      .references(() => crmCustomers.id, { onDelete: 'cascade' }),
+    receipt_id: text('receipt_id')
+      .notNull()
+      .references(() => crmPaymentReceipts.id, { onDelete: 'cascade' }),
+    to_customer_id: text('to_customer_id')
+      .notNull()
+      .references(() => crmCustomers.id, { onDelete: 'cascade' }),
+    to_receipt_id: text('to_receipt_id')
+      .notNull()
+      .references(() => crmPaymentReceipts.id, { onDelete: 'cascade' }),
+    amount_paise: integer('amount_paise').notNull(),
+    reason: text('reason').notNull(),
+    bank_reference: text('bank_reference').notNull(),
+    action_id: text('action_id').notNull(),
+    created_at: text('created_at').notNull(),
+  },
+  (t) => [
+    index('receipt_transfers_customer_id_idx').on(t.customer_id),
+    index('receipt_transfers_receipt_id_idx').on(t.receipt_id),
+    index('receipt_transfers_to_customer_id_idx').on(t.to_customer_id),
+    check(
+      'receipt_transfers_amount_paise_check',
+      sql`typeof(${t.amount_paise}) = 'integer' and ${t.amount_paise} > 0`,
+    ),
+    check(
+      'receipt_transfers_accounts_check',
+      sql`${t.customer_id} <> ${t.to_customer_id}`,
+    ),
+  ],
+);
+
 export const crmPaymentAllocations = sqliteTable(
   'payment_allocations',
   {

@@ -39,6 +39,7 @@ export class CustomersService {
           requester: user,
           now: new Date().toISOString(),
           customerId: randomUUID(),
+          touched: new Set(),
           effects: [],
           references: {},
         };

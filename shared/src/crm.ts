@@ -150,6 +150,8 @@ export const actionEnvelopeSchema = z
     actorId: id.optional(),
     idempotencyKey: z.string().min(8).max(120),
     expectedVersion: z.number().int().min(0).optional(),
+    // Versions of other accounts a command touches, by customer id.
+    expectedVersions: z.record(id, z.number().int().min(0)).optional(),
   })
   .strict();
 export type CrmCommand = z.infer<typeof crmActionSchema>;
@@ -208,6 +210,8 @@ export interface ActionResult {
   references: Record<string, string>;
   termsVersion?: string;
   review?: AccountReview;
+  /** One review per touched customer account, keyed by customer id. */
+  reviews?: Record<string, AccountReview>;
 }
 export interface Customer {
   id: string;

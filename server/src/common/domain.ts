@@ -14,11 +14,27 @@ export interface ActionContext {
   actor: User;
   requester: User;
   now: string;
+  /** Primary customer account: the command's target. */
   customerId: string;
+  /**
+   * Every customer account the command acts on, primary included. The
+   * engine version-checks, bumps, audits and reviews each one. Shared by
+   * contexts derived with forCustomer().
+   */
+  touched: Set<string>;
   orderId?: string;
   effects: ActionResult['effects'];
   references: Record<string, string>;
   command?: CrmCommand;
+}
+/**
+ * Act on another customer account inside the same command. The derived
+ * context shares the effects, references and touched set, so the engine
+ * checks the second account exactly like the first.
+ */
+export function forCustomer(c: ActionContext, customerId: string) {
+  c.touched.add(customerId);
+  return { ...c, customerId, orderId: undefined } satisfies ActionContext;
 }
 export class DomainFailure extends Error {
   constructor(

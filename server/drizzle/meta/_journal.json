@@ -43,6 +43,13 @@
       "when": 1793031867541,
       "tag": "0005_yellow_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793461278199,
+      "tag": "0006_robust_phalanx",
+      "breakpoints": true
     }
   ]
 }

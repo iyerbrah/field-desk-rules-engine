@@ -6,6 +6,7 @@ import {
   integer,
   sqliteTable,
   text,
+  type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { crmSkus } from '../catalog/catalog.model.js';
 import { crmOrders } from '../orders/orders.model.js';
@@ -86,15 +87,23 @@ export const crmDeliveries = sqliteTable(
       .notNull()
       .references(() => crmOrders.id, { onDelete: 'cascade' }),
     qty: integer('qty').notNull(),
+    // FUL-007: a delivery correction is a negative row linked to the
+    // confirmation it reverses (WF-001: history is never edited).
+    reversal_of_id: text('reversal_of_id').references(
+      (): AnySQLiteColumn => crmDeliveries.id,
+    ),
+    reason: text('reason').notNull().default(''),
+    evidence: text('evidence').notNull().default(''),
     action_id: text('action_id').notNull(),
     created_at: text('created_at').notNull(),
   },
   (t) => [
     index('deliveries_shipment_line_id_idx').on(t.shipment_line_id),
     index('deliveries_order_id_idx').on(t.order_id),
+    index('deliveries_reversal_idx').on(t.reversal_of_id),
     check(
       'deliveries_qty_check',
-      sql`typeof(${t.qty}) = 'integer' and ${t.qty} > 0`,
+      sql`typeof(${t.qty}) = 'integer' and ((${t.qty} > 0 and ${t.reversal_of_id} is null) or (${t.qty} < 0 and ${t.reversal_of_id} is not null))`,
     ),
   ],
 );

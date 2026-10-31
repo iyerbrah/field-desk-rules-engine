@@ -218,6 +218,12 @@ export class ActionsService {
                   envelope.command.payload,
                 );
                 break;
+              case 'CORRECT_DELIVERY':
+                this.fulfillmentService.correctDelivery(
+                  c,
+                  envelope.command.payload,
+                );
+                break;
               case 'CORRECT_DISPATCHED_ORDER':
                 this.fulfillmentService.correct(c, envelope.command.payload);
                 break;

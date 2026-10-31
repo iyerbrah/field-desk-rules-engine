@@ -70,9 +70,11 @@ export class AuditService {
       reason =
         row.kind === 'RETURN'
           ? `Returned goods reduce charge ${row.adjusts_id} by ${-Number(row.amount_paise)} paise; the original charge remains recorded.`
-          : row.kind === 'RETURN_FEE'
-            ? `Return ${row.source_id} incurs the recorded deduction of ${row.amount_paise} paise.`
-            : `Confirmed delivery ${row.source_id} recognizes ${row.amount_paise} paise for shipment line ${row.shipment_line_id}; unconfirmed units create no charge.`;
+          : row.kind === 'DELIVERY_CORRECTION'
+            ? `Delivery correction ${row.source_id} reduces charge ${row.adjusts_id} by ${-Number(row.amount_paise)} paise; the original charge remains recorded.`
+            : row.kind === 'RETURN_FEE'
+              ? `Return ${row.source_id} incurs the recorded deduction of ${row.amount_paise} paise.`
+              : `Confirmed delivery ${row.source_id} recognizes ${row.amount_paise} paise for shipment line ${row.shipment_line_id}; unconfirmed units create no charge.`;
     } else if (table === 'payment_allocations') {
       reason =
         Number(row.amount_paise) > 0

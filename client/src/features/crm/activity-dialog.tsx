@@ -29,6 +29,7 @@ const titles: Partial<Record<CommandType, string>> = {
   CANCEL_REMAINDER: 'Cancel unshipped items',
   RECORD_RETURN: 'Record a return',
   CORRECT_DISPATCHED_ORDER: 'Record shipment correction',
+  CORRECT_DELIVERY: 'Correct delivered count',
   RECEIVE_CUSTOMER_PAYMENT: 'Record payment',
   ALLOCATE_PAYMENT: 'Allocate available cash',
   REDEEM_POINTS: 'Redeem reward points',

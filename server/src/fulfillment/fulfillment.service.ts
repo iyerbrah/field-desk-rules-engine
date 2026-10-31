@@ -8,6 +8,7 @@ import { AccountsService } from '../accounts/accounts.service.js';
 import { RewardsService } from '../rewards/rewards.service.js';
 import { CatalogRepository } from '../catalog/catalog.repository.js';
 import { ReturnsRepository } from '../returns/returns.repository.js';
+import { CapacityReconciler } from '../settlement/capacity.reconciler.js';
 import type { ActionContext as Context, Payload } from '../common/domain.js';
 import {
   authorize,
@@ -28,6 +29,7 @@ export class FulfillmentService {
     private readonly rewardsService: RewardsService,
     private readonly catalogRepository: CatalogRepository,
     private readonly returnsRepository: ReturnsRepository,
+    private readonly capacityReconciler: CapacityReconciler,
   ) {}
   load(c: Context, p: Payload<'START_LOADING'>) {
     authorize(c, 'WAREHOUSE', 'ADMIN');
@@ -164,6 +166,108 @@ export class FulfillmentService {
 
     this.accountsService.allocateCash(c);
 
+    this.rewardsService.refresh(c);
+  }
+  /**
+   * FUL-007 (FDSK-170): lower an overstated delivery confirmation. The
+   * removed units go back to dispatched, in transit. Only facts are
+   * recorded here; the capacity reconciler releases what no longer fits.
+   */
+  correctDelivery(c: Context, p: Payload<'CORRECT_DELIVERY'>) {
+    authorize(c, 'KAM', 'ADMIN');
+    const order = useOrder(c, this.ordersRepository.findById(p.orderId));
+    const shipment = this.fulfillmentRepository.findForOrder(
+      p.shipmentId,
+      order.id,
+    );
+    if (
+      !shipment ||
+      (shipment.status !== 'DISPATCHED' && shipment.status !== 'DELIVERED')
+    )
+      fail('SHIPMENT_STATE', 'Select a dispatched or delivered shipment');
+    distinct(p.items.map((item) => item.shipmentLineId));
+    for (const item of p.items) {
+      const line = this.fulfillmentRepository.findInShipment(
+        item.shipmentLineId,
+        shipment.id,
+      );
+      if (!line)
+        fail(
+          'LINE_NOT_FOUND',
+          'The shipment line does not belong to this shipment',
+        );
+      const delivered = this.fulfillmentRepository.deliveredForShipmentLine(
+        line.id,
+      );
+      const returned = this.returnsRepository.returnedForShipmentLine(line.id);
+      // FUL-007: returned <= corrected total < confirmed total.
+      if (item.deliveredQty >= delivered)
+        fail(
+          'DELIVERY_NOT_REDUCED',
+          `The corrected count must be below the ${delivered} units confirmed`,
+        );
+      if (item.deliveredQty < returned)
+        fail(
+          'CORRECTION_BELOW_RETURNED',
+          `${returned} units were already returned, so the corrected count cannot be lower (FUL-001)`,
+        );
+      let excess = delivered - item.deliveredQty;
+      // FUL-007: reverse confirmations latest first.
+      for (const confirmation of this.fulfillmentRepository.openConfirmationsLatestFirst(
+        line.id,
+      )) {
+        if (!excess) break;
+        const qty = Math.min(excess, confirmation.remaining);
+        excess -= qty;
+        const reversalId = randomUUID();
+        // WF-001: a linked negative entry, never an edit.
+        this.fulfillmentRepository.insertDelivery(c, {
+          id: reversalId,
+          shipment_line_id: line.id,
+          order_id: order.id,
+          qty: -qty,
+          reversal_of_id: confirmation.id,
+          reason: p.reason,
+          evidence: p.evidence,
+          action_id: c.id,
+          created_at: c.now,
+        });
+        const [charge] = this.accountsRepository
+          .chargesForDelivery(confirmation.id)
+          .filter((row) => row.amount_paise > 0);
+        if (!charge)
+          fail('CHARGE_MISMATCH', 'The confirmation has no goods charge');
+        // WF-005: the original charge stays; a linked adjustment reduces it.
+        this.accountsRepository.insertCharge(c, {
+          id: randomUUID(),
+          customer_id: c.customerId,
+          order_id: order.id,
+          line_key: line.line_key,
+          shipment_line_id: line.id,
+          kind: 'DELIVERY_CORRECTION',
+          amount_paise: -safe(qty * line.unit_price_paise),
+          adjusts_id: charge.id,
+          source_id: reversalId,
+          action_id: c.id,
+          created_at: c.now,
+        });
+        // ACC-001 / WF-003 order: release settlement above the reduced
+        // charge. Released cash stays free for WF-002 below: nothing was
+        // returned, so unlike a return it does not fund a credit note.
+        this.capacityReconciler.releaseChargeOverSettlement(
+          c,
+          charge.id,
+          reversalId,
+        );
+      }
+    }
+    // FUL-006 / FUL-007: the removed units are back in transit.
+    if (shipment.status === 'DELIVERED')
+      this.fulfillmentRepository.updateShipment(c, shipment.id, {
+        status: 'DISPATCHED',
+      });
+    // WF-002: a delivery correction is a cash-allocation occasion.
+    this.accountsService.allocateCash(c);
     this.rewardsService.refresh(c);
   }
   correct(c: Context, p: Payload<'CORRECT_DISPATCHED_ORDER'>) {

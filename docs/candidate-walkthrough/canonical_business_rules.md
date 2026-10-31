@@ -71,7 +71,15 @@ $$
 
 **FUL-005. Dispatch.** Dispatch a whole `LOADING` batch. Its loaded units become dispatched units, its reservation ends, and its status becomes `DISPATCHED`.
 
-**FUL-006. Delivery.** Confirm quantities only on a `DISPATCHED` batch; set it to `DELIVERED` when all dispatched units are confirmed.
+**FUL-006. Delivery.** Confirm quantities only on a `DISPATCHED` batch; set it to `DELIVERED` when all dispatched units are confirmed. A delivery correction (**FUL-007**) returns a `DELIVERED` batch to `DISPATCHED`.
+
+**FUL-007. Delivery correction.** A KAM or Admin may lower an overstated confirmed count on a `DISPATCHED` or `DELIVERED` batch, giving a reason and evidence. For each corrected shipment line the new total $d'_h$ must satisfy
+
+$$
+r_h\leq d'_h<d_h.
+$$
+
+The removed units return to dispatched, in transit; $s_h$ and order demand do not change, and later confirmations follow **FUL-006**. Reverse confirmations latest first, each with a linked negative entry (**WF-001**), and reduce each confirmation's charge by a linked adjustment of $-q\,p_h$. Release settlement above the reduced charge in **WF-003** order. Released cash stays free: nothing was returned, so no credit note is created. Then apply **WF-002**.
 
 ![Shipment lifecycle diagram](diagrams/shipment-lifecycle.svg)
 
@@ -185,7 +193,7 @@ $$
 
 ### Domain policies
 
-**WF-002. Cash allocation occasions.** Apply **ACC-003** after payment receipt, delivery confirmation, additional-goods correction, and completed return settlement, or on explicit allocation. Other operations do not trigger cash allocation.
+**WF-002. Cash allocation occasions.** Apply **ACC-003** after payment receipt, delivery confirmation, additional-goods correction, delivery correction (**FUL-007**), and completed return settlement, or on explicit allocation. Other operations do not trigger cash allocation.
 
 ### Transitions
 
@@ -205,6 +213,8 @@ $$
 \operatorname{value}(\operatorname{charge}(e))=q_ep_h,
 \qquad \#\operatorname{charges}(e)=1.
 $$
+
+A delivery correction (**FUL-007**) keeps the charge and adds one linked adjustment per reversed confirmation; the reversal entry carries exactly one such adjustment of $q_ep_h$ with $q_e<0$.
 
 ![Return settlement flow](diagrams/return-settlement.svg)
 

@@ -110,6 +110,25 @@ export const crmActionSchema = z.discriminatedUnion('type', [
     reason,
     reference: reason,
   }),
+  // FUL-007 (FDSK-170): lower an overstated delivery confirmation.
+  // deliveredQty is the corrected total for the line, not a delta.
+  action('CORRECT_DELIVERY', {
+    orderId: id,
+    shipmentId: id,
+    items: z
+      .array(
+        z
+          .object({
+            shipmentLineId: id,
+            deliveredQty: z.number().int().min(0).max(10000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+    reason,
+    evidence: z.string().trim().min(8).max(2000),
+  }),
   action('CORRECT_DISPATCHED_ORDER', {
     orderId: id,
     items: z

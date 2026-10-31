@@ -200,7 +200,13 @@ export class AccountsRepository {
       .where(
         and(
           eq(crmReceivableEntries.source_id, deliveryId),
-          inArray(crmReceivableEntries.kind, ['DELIVERY', 'CORRECTION']),
+          // WF-005 / FUL-007: a delivery reversal carries one linked
+          // DELIVERY_CORRECTION adjustment instead of a goods charge.
+          inArray(crmReceivableEntries.kind, [
+            'DELIVERY',
+            'CORRECTION',
+            'DELIVERY_CORRECTION',
+          ]),
         ),
       )
       .orderBy(insertionOrder(crmReceivableEntries))

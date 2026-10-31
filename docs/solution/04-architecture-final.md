@@ -22,7 +22,7 @@ flowchart LR
 | Return settlement on the reconciler | `server/src/returns/returns.service.ts` | WF-003 | Built. From 239 to 178 lines, with identical effects. |
 | Multi-account engine | `server/src/actions/actions.service.ts`, `forCustomer` in `common/domain.ts` | CUS-001 | Built. |
 | FDSK-170 `CORRECT_DELIVERY` | `fulfillment.service.ts#correctDelivery`, migration `0006` | FUL-007 (new), FUL-006, WF-002, WF-005 | Built, 11 scenarios. |
-| FDSK-169 `REATTRIBUTE_PAYMENT` | `accounts.service.ts#reattribute`, migration `0007` | ACC-004 (new), ACC-002, WF-002 | Built with a v1 limit on credit, 8 scenarios. |
+| FDSK-169 `REATTRIBUTE_PAYMENT` | `accounts.service.ts#reattribute`, migrations `0007` and `0008` | ACC-004 (new), ACC-002, CRD-001, CRD-006, WF-002 | Built, including credit handling, 10 scenarios. |
 | Rules, API and roles docs | `docs/candidate-walkthrough/*`, `docs/api.md` | | Built, in the same commits as the code. |
 
 ### 1.1 The reconciler is what makes the features small
@@ -30,7 +30,7 @@ flowchart LR
 Both stories shrink a capacity that is already in use, so neither feature contains settlement code:
 
 - **FDSK-170.** The handler writes a negative delivery row linked to the confirmation, plus one `DELIVERY_CORRECTION` adjustment on that confirmation's charge, and moves the shipment back to `DISPATCHED`. `releaseChargeOverSettlement` gives back cash, then credit, then points. WF-002 re-allocates the freed cash, and the reward refresh moves points or creates clawback.
-- **FDSK-169.** The handler writes a transfer row and a receipt on the right customer. `releaseReceiptOverAllocation` releases the source receipt's allocations that no longer fit, with free cash going first. WF-002 and rewards then run on both accounts.
+- **FDSK-169.** The handler writes a transfer row and a receipt on the right customer. `releaseReceiptOverAllocation` releases the source receipt's allocations that no longer fit, with free cash going first. If the receipt also funds credit, `withdrawCreditFunding` handles it, running first in plan mode so the handler can ask before anything is written: unused credit shrinks, applied credit is reversed once confirmed, and refunded credit blocks the move. WF-002 and rewards then run on both accounts.
 - **Returns** are now one more user of the same reconciler. The characterization tests prove nothing changed.
 
 The release order is declared once: `WF003_RELEASE_ORDER = ['cash', 'credit', 'points']`. What happens to released cash stays the caller's rule, because the business rules differ: returns fund a credit note (WF-003), a delivery correction leaves the cash free (decision 2).
@@ -56,10 +56,10 @@ A receipt is never edited. Its capacity is `effective_paise = amount_paise - Σ 
 | --- | --- | --- |
 | Command registry replaces the 20-case switch | **Not built.** The switch gained two cases. | Time. The registry is mechanical once the reconciler exists, and it was the first item marked cuttable. |
 | Reactions declared once (occasion list, watched tables) | **Not built.** New handlers still call `allocateCash` and `refresh` explicitly, with `// WF-002` comments naming the occasion. | Time. The design point still holds: WF-002 must remain an occasion list, not a table trigger. |
-| Batched questions with `c.ask` and `answers` | **Not built.** | It was only needed for the FDSK-169 applied-credit question, which was deferred (decision 5). |
+| Batched questions with `c.ask` and `answers` | **Partly built.** The envelope accepts `answers`, and FDSK-169 asks one question (`reverseAppliedCredit`) through `DomainDecision`. There is no generic `c.ask` that collects several questions before failing. | One question was all the features needed (decision 12). |
 | Dry-run preview (`dryRun` gives `PREVIEW`) | **Not built.** | Time. The savepoint machinery makes it straightforward: run, collect effects and reviews, roll back. |
 | Value objects as the single formula source | **Not built.** Charge outstanding is still computed inline in several places. | Time. Listed in `Evaluator_notes.md`. |
-| FDSK-169 credit handling: shrink open credit, ask then reverse applied credit, reject refunded | **Rejects every credit-funded case** (`RECEIPT_FUNDS_CREDIT`). | It needs signed `credit_funds`, audit changes to "funding equals amount", and the answer mechanism. The reject path is honest and safe. |
+| FDSK-169 credit handling: shrink open credit, ask then reverse applied credit, reject refunded | **Built as specified** (stretch, decision 11). A credit's issued value is now its net receipt funding. The audit checks the original funding equals the issued amount, and that net funding stays non-negative. | |
 | `payment_receipts.transferred_from_receipt_id` | Not added. | The transfer row already links both receipts (decision 7). |
 | UI: decision dialog, preview, two forms | Only activity labels were added. | Time. |
 | Solution B slice on `solution-b` | Not built. | Time. The design is in stage 3 §5. |
@@ -74,8 +74,7 @@ A receipt is never edited. Its capacity is `effective_paise = amount_paise - Σ 
 
 ## 4. Next steps, in order
 
-1. Signed credit funding, then FDSK-169's open-credit shrink and the applied-credit question (`c.ask` plus `answers`).
-2. Declare WF-002 occasions and the reaction pipeline once, and remove the pasted tails.
-3. Command registry with rule ID, roles and targets per command.
-4. Dry-run preview, plus the client decision dialog and preview step.
-5. Value objects as the only formula source, with property tests for the audit.
+1. Declare WF-002 occasions and the reaction pipeline once, and remove the pasted tails.
+2. Command registry with rule ID, roles and targets per command.
+3. Dry-run preview, plus the client decision dialog and preview step.
+4. Value objects as the only formula source, with property tests for the audit.

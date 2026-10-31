@@ -105,7 +105,7 @@ $$
 v_j,c_j,k_j,z_j\geq0,\qquad b_j=v_j-c_j-k_j-z_j\geq0.
 $$
 
-**ACC-002. Receipt capacity.** Receipt value is either allocated, reserved as credit funding, or free:
+**ACC-002. Receipt capacity.** Receipt value is either allocated, reserved as credit funding, or free. A receipt's effective amount $m_i$ is the captured amount less any part moved to another customer under **ACC-004**:
 
 $$
 a_i,f_i\geq0,\qquad u_i=m_i-a_i-f_i\geq0.
@@ -118,6 +118,8 @@ $$
 $$
 x=\min(u_i,b_j).
 $$
+
+**ACC-004. Payment re-attribution.** Accounts or Admin may move all or part of a receipt recorded against the wrong customer to the right one, giving a reason and the bank reference. The source receipt is not edited (**WF-001**): a transfer lowers its effective amount and creates a receipt on the receiving customer with the original reference. The moved amount $t$ must satisfy $0<t\leq m_i$. Free cash absorbs the move first. Allocations that no longer fit are released in reverse order of first allocation. If the move would also need credit funded by the receipt, it is refused (v1 limit). Both accounts are version-checked and reviewed, and each records the action. Then apply **WF-002** on both accounts.
 
 ### Credits
 
@@ -193,7 +195,7 @@ $$
 
 ### Domain policies
 
-**WF-002. Cash allocation occasions.** Apply **ACC-003** after payment receipt, delivery confirmation, additional-goods correction, delivery correction (**FUL-007**), and completed return settlement, or on explicit allocation. Other operations do not trigger cash allocation.
+**WF-002. Cash allocation occasions.** Apply **ACC-003** after payment receipt, delivery confirmation, additional-goods correction, delivery correction (**FUL-007**), payment re-attribution (**ACC-004**, on both accounts), and completed return settlement, or on explicit allocation. Other operations do not trigger cash allocation.
 
 ### Transitions
 

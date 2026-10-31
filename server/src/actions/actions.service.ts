@@ -221,6 +221,9 @@ export class ActionsService {
                   envelope.command.payload,
                 );
                 break;
+              case 'REATTRIBUTE_PAYMENT':
+                this.accountsService.reattribute(c, envelope.command.payload);
+                break;
               case 'CORRECT_DELIVERY':
                 this.fulfillmentService.correctDelivery(
                   c,

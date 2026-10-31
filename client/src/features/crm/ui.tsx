@@ -377,6 +377,7 @@ export const activityLabels: Record<string, string> = {
   RECORD_RETURN: 'Goods returned',
   RECEIVE_CUSTOMER_PAYMENT: 'Payment received',
   ALLOCATE_PAYMENT: 'Cash allocated',
+  REATTRIBUTE_PAYMENT: 'Payment moved between customers',
   REDEEM_POINTS: 'Points redeemed',
   ISSUE_CREDIT_NOTE: 'Customer credit reserved',
   APPLY_CREDIT_NOTE: 'Credit applied',

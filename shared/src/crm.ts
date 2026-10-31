@@ -83,6 +83,16 @@ export const crmActionSchema = z.discriminatedUnion('type', [
     reference: z.string().trim().min(1).max(200),
   }),
   action('ALLOCATE_PAYMENT', { customerId: id }),
+  // ACC-004 (FDSK-169): move a payment recorded against the wrong customer.
+  // amountPaise defaults to everything still on the source receipt.
+  action('REATTRIBUTE_PAYMENT', {
+    customerId: id,
+    receiptId: id,
+    targetCustomerId: id,
+    amountPaise: amount.optional(),
+    reason,
+    bankReference: z.string().trim().min(1).max(200),
+  }),
   action('REDEEM_POINTS', { customerId: id, chargeId: id, points: amount }),
   action('ISSUE_CREDIT_NOTE', { customerId: id, amountPaise: amount, reason }),
   action('APPLY_CREDIT_NOTE', {
@@ -356,6 +366,8 @@ export interface CustomerSummary {
 export interface LedgerView {
   finance: Array<Record<string, unknown>>;
   receipts: Array<Record<string, unknown>>;
+  /** ACC-004 receipt transfers out of or into this account. */
+  transfers: Array<Record<string, unknown>>;
   allocations: Array<Record<string, unknown>>;
   creditApplications: Array<Record<string, unknown>>;
   credits: Array<Record<string, unknown>>;

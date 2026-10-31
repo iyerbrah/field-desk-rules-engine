@@ -11,7 +11,8 @@ export function assertAccount(snapshot: CustomerSnapshot, expectedNet: number) {
   const sum = (rows: Record<string, unknown>[], key: string) =>
     rows.reduce((total, row) => total + Number(row[key]), 0);
   const recognized = sum(ledger.finance, 'amount_paise');
-  const receipts = sum(ledger.receipts, 'amount_paise');
+  // ACC-004: receipts count at their effective amount (less transfers out).
+  const receipts = sum(ledger.receipts, 'effective_paise');
   const refunds = sum(ledger.refunds, 'amount_paise');
   const redeemed = sum(ledger.redemptions, 'points');
   assert.equal(summary.netBalancePaise, expectedNet);

@@ -24,7 +24,7 @@ export class CreditsService {
       .receiptsByInsertion(c.customerId)
       .map((receipt) => {
         const free =
-          receipt.amount_paise -
+          receipt.effective_paise -
           this.accountsRepository.allocatedFromReceipt(receipt.id) -
           this.creditsRepository.reservedFromReceipt(receipt.id);
         available = safe(available + free);

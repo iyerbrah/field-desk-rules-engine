@@ -32,6 +32,7 @@ const titles: Partial<Record<CommandType, string>> = {
   CORRECT_DELIVERY: 'Correct delivered count',
   RECEIVE_CUSTOMER_PAYMENT: 'Record payment',
   ALLOCATE_PAYMENT: 'Allocate available cash',
+  REATTRIBUTE_PAYMENT: 'Move payment to another customer',
   REDEEM_POINTS: 'Redeem reward points',
   ISSUE_CREDIT_NOTE: 'Reserve customer credit',
   APPLY_CREDIT_NOTE: 'Apply credit',

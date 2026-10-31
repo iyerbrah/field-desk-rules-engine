@@ -81,6 +81,46 @@ export class CapacityReconciler {
     return released;
   }
 
+  /**
+   * ACC-002: release cash allocations above a receipt's effective amount
+   * (captured less transfers out), visiting charges in reverse order of
+   * first allocation, as WF-003 does for receipts on a charge. Free cash
+   * absorbs a shrink first because only the excess is released. Returns
+   * the part allocations could not cover: that part funds credit, which
+   * the caller must handle.
+   */
+  releaseReceiptOverAllocation(c: Context, receiptId: string): number {
+    const receipt = this.accountsRepository.findCustomerReceipt(
+      receiptId,
+      c.customerId,
+    );
+    if (!receipt)
+      fail('RECEIPT_MISMATCH', 'The receipt is not on this account');
+    let excess = Math.max(
+      0,
+      this.accountsRepository.allocatedFromReceipt(receiptId) +
+        this.creditsRepository.reservedFromReceipt(receiptId) -
+        receipt.effective_paise,
+    );
+    for (const allocation of this.accountsRepository.cashByChargeForReceipt(
+      receiptId,
+    )) {
+      const take = Math.min(excess, allocation.n);
+      if (!take) continue;
+      this.accountsRepository.insertAllocation(c, {
+        id: randomUUID(),
+        customer_id: c.customerId,
+        receipt_id: receiptId,
+        charge_id: allocation.charge_id,
+        amount_paise: -take,
+        action_id: c.id,
+        created_at: c.now,
+      });
+      excess -= take;
+    }
+    return excess;
+  }
+
   /** WF-003: cash goes back to receipts in reverse order of first allocation. */
   private releaseCash(
     c: Context,

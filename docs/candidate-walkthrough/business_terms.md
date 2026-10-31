@@ -49,8 +49,10 @@ Admin can perform every listed action. The role column lists the other permitted
 | `CONFIRM_DELIVERY`           | Warehouse       | Confirm some or all remaining dispatched units.             |
 | `RECORD_RETURN`              | Warehouse       | Receive delivered units back; record an explicit deduction. |
 | `CORRECT_DISPATCHED_ORDER`   | KAM             | Record authorized additional dispatched goods.              |
+| `CORRECT_DELIVERY`           | KAM             | Lower an overstated delivery count (FUL-007).               |
 | `RECEIVE_CUSTOMER_PAYMENT`   | Accounts        | Capture customer cash and allocate eligible value.          |
 | `ALLOCATE_PAYMENT`           | Accounts        | Allocate existing free cash.                                |
+| `REATTRIBUTE_PAYMENT`        | Accounts        | Move a payment to the customer who made it (ACC-004).       |
 | `ISSUE_CREDIT_NOTE`          | Accounts        | Reserve free receipt value as explicit credit.              |
 | `APPLY_CREDIT_NOTE`          | Accounts        | Settle a selected charge with credit.                       |
 | `REFUND_CREDIT_NOTE`         | Accounts        | Record a payout from available credit.                      |

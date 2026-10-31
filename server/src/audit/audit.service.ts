@@ -333,9 +333,9 @@ export class AuditService {
         'Receipt cash is allocated or reserved at most once',
         allocated >= 0 &&
           reserved >= 0 &&
-          allocated + reserved <= receipt.amount_paise &&
+          allocated + reserved <= receipt.effective_paise &&
           invalidPairs === 0,
-        `Received ${receipt.amount_paise}; allocated ${allocated}; reserved ${reserved} paise.`,
+        `Received ${receipt.effective_paise} (captured ${receipt.amount_paise}, less transfers); allocated ${allocated}; reserved ${reserved} paise.`,
         [receipt.id],
       );
     }

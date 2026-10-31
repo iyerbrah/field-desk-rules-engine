@@ -8,7 +8,7 @@ Backend domains keep their implementation together. The [backend module index](.
 
 - **Models** define typed entities and value objects, schema mappings, and local invariants. Order transitions, deliverable/returnable quantities, credit availability, cash-funded reward rounding, and charge balances have explicit model behavior.
 - **Repositories** own database reads and writes using typed Drizzle tables, joins, predicates, aggregates, inserts, and updates. Repository modules expose persistence to cooperating domains without importing their business services or introducing circular service dependencies.
-- **Services** authorize operations and coordinate domain work. Cash allocation belongs to Accounts; reward entitlement updates and point balances belong to Rewards. Fulfillment and Returns call those services when a physical operation changes settlement or entitlement.
+- **Services** authorize operations and coordinate domain work. Cash allocation belongs to Accounts; reward entitlement updates and point balances belong to Rewards. Fulfillment and Returns call those services when a physical operation changes settlement or entitlement. When a command shrinks a capacity that is already in use, Settlement's capacity reconciler releases the excess under the declared WF-003 order.
 - **Controllers** handle HTTP parameters, runtime validation, and authenticated actors. Domain mutations retain the common action contract; domain read controllers expose their own records.
 
 Use only the layers a capability needs. Catalog serves repository reads directly, Workspace returns static metadata without a repository or service, and Health keeps its single database readiness query in a service. These modules do not need the full business-module file layout.

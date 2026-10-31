@@ -6,7 +6,7 @@ Owns physical return documents, their returned quantities and values, and coordi
 
 - [returns.model.ts](returns.model.ts): Return and return-line tables, returnable-quantity validation, and explicit fee bounds.
 - [returns.repository.ts](returns.repository.ts): Typed return persistence and per-line/customer return totals.
-- [returns.service.ts](returns.service.ts): Validate a physical return, reduce source charges, release excess settlements, fund credit, and refresh allocations and rewards.
+- [returns.service.ts](returns.service.ts): Validate a physical return, reduce source charges, release excess settlements through Settlement, pay the fee from released cash, fund credit, and refresh allocations and rewards.
 - [returns.controller.ts](returns.controller.ts): Authenticated customer return history.
 
 ## Coordination

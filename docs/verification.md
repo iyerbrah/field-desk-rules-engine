@@ -27,13 +27,19 @@ Additional HTTP cases race credit applications and point redemptions. Two hundre
 
 The service integration suite uses test-only fixtures to check role boundaries and forged actors, exact paise and rounding, return reversals of credit/point settlement, partial settlement corrections, stale loading documents, and preserved dispatched evidence. HTTP assertions compare domain customer, catalog, shipment, return, credit, and reward reads with the composed customer and order views. They also compare bootstrap and snapshot endpoints with the query service and verify that non-admin bootstrap projects only the current staff identity. It also verifies that the removed development runner, seed, and reset endpoints return 404 even for an authenticated administrator. An altered-record test proves account checks detect inconsistent evidence and roll back the next activity.
 
+Scenario suites added for the rules-engine work share a test bootstrap (`server/test/support/app.ts`) and the account balance check (`server/test/support/account.ts`):
+
+- `return-settlement.test.ts` pins every ledger row that five returns write. It covers latest-allocated receipt first, the fee paid from released cash, credit returned to its note, points restored, cash then credit then points, and payload order across lines. These are characterization tests: they were recorded from the original code before the release logic moved into Settlement.
+- `delivery-correction.test.ts` (FUL-007) has 11 cases: correct then confirm the rest, latest-first reversal, freed cash re-allocated, credit and points restored, clawback, the returned-units and non-reducing bounds, a supplement shipment, role, and stale version.
+- `payment-reattribution.test.ts` (ACC-004) has 10 cases: unallocated advance, the fully allocated two-customer example with clawback, partial move, unused credit shrink, the applied-credit question then decline then confirm, refunded credit rejection, same customer, both version checks, and role.
+
 `server/test/migrations.test.ts` migrates a populated database from the preceding schema. It verifies that existing credits, applications, refunds, and receipt funding survive the upgrade, that new reversal links are valid, and that reapplying migrations is safe. It also starts with legacy workflow metadata and verifies that its tables are removed while customer transactions remain intact. Authentication tests cover strict validation, session expiry/revocation, default-deny access, CSRF, credential throttling, and password handling.
 
 The seed suite verifies all six commercial states and seven fulfillment states across the 24 seeded orders, checks customer balances and reward buckets, and verifies that legacy workflow tables are absent. It also verifies reruns by another administrator, preservation of manual changes, rollback after a missing staff role, rebuilding an empty test database, and production/access restrictions.
 
 ## Account reconciliation
 
-This check is derived from the [canonical business rules](candidate-walkthrough/canonical_business_rules.md), not an additional policy. For one customer, let $G$ be confirmed delivery value, $V$ returned value, $\Phi$ return deductions, $M$ receipts, $F$ net refunds, and $Z$ net redeemed points. With outstanding charges $b_j$, free cash $u_i$, and open credit $O_n$:
+This check is derived from the [canonical business rules](candidate-walkthrough/canonical_business_rules.md), not an additional policy. For one customer, let $G$ be confirmed delivery value, $V$ returned value, $\Phi$ return deductions, $M$ effective receipts (captured less amounts moved to other customers), $F$ net refunds, and $Z$ net redeemed points. With outstanding charges $b_j$, free cash $u_i$, and open credit $O_n$:
 
 $$
 G-V+\Phi-M+F-Z

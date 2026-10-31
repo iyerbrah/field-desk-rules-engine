@@ -11,7 +11,7 @@ Owns receipt-backed customer credit, its funding links, applications to charges,
 
 ## Coordination
 
-Accounts provides receipt and charge evidence; Rewards provides existing point settlement when calculating charge capacity. Returns can reserve released receipt allocations through the credit repository during a return. Explicit settlement commands enter through Actions and append entries rather than overwriting earlier settlements. Refund records describe bookkeeping; this module does not initiate bank transfers.
+Accounts provides receipt and charge evidence; Rewards provides existing point settlement when calculating charge capacity. Returns can reserve released receipt allocations through the credit repository during a return. A credit's issued value is its net receipt funding: funding withdrawn because its receipt moved to another customer (ACC-004) is a linked negative `credit_funds` row. Explicit settlement commands enter through Actions and append entries rather than overwriting earlier settlements. Refund records describe bookkeeping; this module does not initiate bank transfers.
 
 ## Related
 

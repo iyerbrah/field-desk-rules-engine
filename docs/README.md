@@ -8,6 +8,7 @@
 - [Business reference and terms version](business-terms.md)
 - [Verification coverage, reports, and historical checkpoints](verification.md)
 - [Local setup and verification](../CONTRIBUTING.md)
+- Rules-engine take-home: [final architecture](solution/04-architecture-final.md), [decisions](solution/decisions.md), [when to build a rules framework](solution/when-to-build-a-rules-framework.md), and [evaluator notes](../Evaluator_notes.md)
 
 ## Related
 

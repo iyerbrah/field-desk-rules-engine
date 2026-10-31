@@ -40,6 +40,7 @@ Test suite: 251 tests originally, 277 now, all green. `pnpm check` passes.
 ## Process notes
 
 - The work was done with Claude (Opus 5.5) in Claude Code, on deadline day, under the working agreement in `CLAUDE.md`: plan first, small commits, tests green before every commit, no history rewriting.
-- The stage-1 and stage-2 architecture drafts are the candidate's own work and are not written by Claude. If they are missing from `docs/solution/`, they were not finished in time.
+- **Stage-1 and stage-2 architecture drafts are not included.** They were meant to be the candidate's own work, written without Claude, and were not finished before the deadline. Claude did not write them on the candidate's behalf. The stage-3 draft was therefore committed after the code, at the end of the session, rather than before it.
+- The session transcript is in `docs/agent-chats/` (readable Markdown, see its README).
 - Tests were written before each feature. FDSK-170's scenarios were committed first as `todo` items, so the history shows them, without ever committing a failing suite.
 - drizzle-kit generated a broken copy statement in migration `0006`, selecting new columns from the old table. It was fixed by hand, following `0003`, and the commit message says so.

@@ -6,10 +6,10 @@ import { FulfillmentRepository } from '../fulfillment/fulfillment.repository.js'
 import { ReturnsRepository } from '../returns/returns.repository.js';
 import { AccountsRepository } from '../accounts/accounts.repository.js';
 import { CreditsRepository } from '../credits/credits.repository.js';
-import { RewardsRepository } from '../rewards/rewards.repository.js';
 import { AccountsService } from '../accounts/accounts.service.js';
 import { RewardsService } from '../rewards/rewards.service.js';
 import { CustomersRepository } from '../customers/customers.repository.js';
+import { CapacityReconciler } from '../settlement/capacity.reconciler.js';
 import type { ActionContext as Context, Payload } from '../common/domain.js';
 import { authorize, useOrder, fail, safe, distinct } from '../common/domain.js';
 
@@ -21,10 +21,10 @@ export class ReturnsService {
     private readonly returnsRepository: ReturnsRepository,
     private readonly accountsRepository: AccountsRepository,
     private readonly creditsRepository: CreditsRepository,
-    private readonly rewardsRepository: RewardsRepository,
     private readonly accountsService: AccountsService,
     private readonly rewardsService: RewardsService,
     private readonly customersRepository: CustomersRepository,
+    private readonly capacityReconciler: CapacityReconciler,
   ) {}
   returnItems(c: Context, p: Payload<'RECORD_RETURN'>) {
     authorize(c, 'WAREHOUSE', 'ADMIN');
@@ -61,6 +61,7 @@ export class ReturnsService {
       action_id: c.id,
       created_at: c.now,
     });
+    // Cash released per receipt, in the order receipts were first released.
     const released = new Map<string, number>();
     for (const { line, qty, amount } of returned) {
       this.returnsRepository.insertReturnLine(c, {
@@ -94,88 +95,19 @@ export class ReturnsService {
           created_at: c.now,
         });
         remaining -= reduction;
-        const cash = this.accountsRepository.cashForCharge(charge.id);
-        const credits = this.creditsRepository.appliedToCharge(charge.id);
-        const rewards = this.rewardsRepository.redeemedForCharge(charge.id);
-        let overage = Math.max(
-          0,
-          cash + credits + rewards - (face - reduction),
+        // ACC-001 / WF-003: release settlement above the reduced charge.
+        const freed = this.capacityReconciler.releaseChargeOverSettlement(
+          c,
+          charge.id,
+          returnId,
         );
-        for (const allocation of this.accountsRepository.cashByReceiptForCharge(
-          charge.id,
-        )) {
-          const take = Math.min(overage, allocation.n);
-          if (!take) continue;
-          this.accountsRepository.insertAllocation(c, {
-            id: randomUUID(),
-            customer_id: c.customerId,
-            receipt_id: allocation.receipt_id,
-            charge_id: charge.id,
-            amount_paise: -take,
-            action_id: c.id,
-            created_at: c.now,
-          });
-          released.set(
-            allocation.receipt_id,
-            (released.get(allocation.receipt_id) ?? 0) + take,
-          );
-          overage -= take;
-        }
-        for (const application of this.creditsRepository.creditByNoteForCharge(
-          charge.id,
-        )) {
-          const take = Math.min(overage, application.n);
-          if (!take) continue;
-          this.creditsRepository.insertApplication(c, {
-            id: randomUUID(),
-            customer_id: c.customerId,
-            credit_note_id: application.credit_note_id,
-            charge_id: charge.id,
-            amount_paise: -take,
-            action_id: c.id,
-            created_at: c.now,
-          });
-          overage -= take;
-        }
-        if (overage > 0) {
-          if (overage > rewards)
-            fail(
-              'SETTLEMENT_MISMATCH',
-              'The return cannot be settled against its source documents',
-            );
-          this.rewardsRepository.insertRedemption(c, {
-            id: randomUUID(),
-            customer_id: c.customerId,
-            charge_id: charge.id,
-            points: -overage,
-            action_id: c.id,
-            created_at: c.now,
-          });
-          this.rewardsRepository.insertPosting(c, {
-            id: randomUUID(),
-            customer_id: c.customerId,
-            line_key: null,
-            bucket: 'AVAILABLE',
-            points_delta: overage,
-            source_id: returnId,
-            action_id: c.id,
-            created_at: c.now,
-          });
-          this.rewardsRepository.insertPosting(c, {
-            id: randomUUID(),
-            customer_id: c.customerId,
-            line_key: null,
-            bucket: 'REDEEMED',
-            points_delta: -overage,
-            source_id: returnId,
-            action_id: c.id,
-            created_at: c.now,
-          });
-        }
+        for (const [receiptId, amount] of freed)
+          released.set(receiptId, (released.get(receiptId) ?? 0) + amount);
       }
       if (remaining)
         fail('CHARGE_MISMATCH', 'Delivered charges do not cover this return');
     }
+    // WF-003: the fee is a separate charge, paid first from released cash.
     if (p.feePaise) {
       const feeId = randomUUID();
       let due = p.feePaise;
@@ -208,6 +140,7 @@ export class ReturnsService {
         due -= take;
       }
     }
+    // WF-003: remaining released cash becomes a receipt-backed credit note.
     const credit = safe(
       [...released.values()].reduce((sum, value) => sum + value, 0),
     );
@@ -233,8 +166,8 @@ export class ReturnsService {
           });
     }
 
+    // WF-002: completed return settlement is a cash-allocation occasion.
     this.accountsService.allocateCash(c);
-
     this.rewardsService.refresh(c);
   }
   forCustomer(customerId: string) {

@@ -10,6 +10,7 @@ import { RewardsRepositoryModule } from '../rewards/rewards.repository.js';
 import { AccountsModule } from '../accounts/accounts.module.js';
 import { RewardsModule } from '../rewards/rewards.module.js';
 import { CustomersRepositoryModule } from '../customers/customers.repository.js';
+import { CapacityReconcilerModule } from '../settlement/capacity.reconciler.js';
 @Module({
   imports: [
     OrdersRepositoryModule,
@@ -21,6 +22,7 @@ import { CustomersRepositoryModule } from '../customers/customers.repository.js'
     AccountsModule,
     RewardsModule,
     CustomersRepositoryModule,
+    CapacityReconcilerModule,
   ],
   controllers: [ReturnsController],
   providers: [ReturnsService],
